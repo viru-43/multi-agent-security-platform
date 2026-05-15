@@ -64,14 +64,27 @@ class OpenAIClient:
         """Generate mock responses for testing without API key."""
         logger.info("[MOCK] Generating mock LLM response")
         
-        # Check if this is an axios vulnerability
-        if "axios" in prompt.lower():
-            text = """Based on the vulnerability analysis, I recommend upgrading axios to version 1.6.0 or later.
+        # Extract recommended version from prompt if available
+        # The prompt contains "recommended_version: X.Y.Z"
+        import re
+        recommended_match = re.search(r'recommended[_\s]+version[:\s]+([^\s,\n]+)', prompt, re.IGNORECASE)
+        
+        if recommended_match:
+            recommended_version = recommended_match.group(1).strip()
+            logger.info("[MOCK] Using recommended version from prompt: %s", recommended_version)
+            text = f"""Based on the vulnerability analysis, I recommend upgrading to version {recommended_version}.
 
-The vulnerability CVE-2023-45857 in axios 0.21.1 allows for SSRF attacks through improper handling of URLs.
-Upgrading to axios@1.6.0 fixes this critical security issue.
+This version addresses the security vulnerabilities identified in the scan.
 
-Recommended version: 1.6.0"""
+Recommended version: {recommended_version}"""
+        elif "axios" in prompt.lower():
+            # Fallback for axios
+            text = """Based on the vulnerability analysis, I recommend upgrading axios to version 1.7.7.
+
+The vulnerability in axios 0.21.1 allows for SSRF attacks.
+Upgrading to axios@1.7.7 fixes this critical security issue.
+
+Recommended version: 1.7.7"""
         else:
             # Generic response for other vulnerabilities
             text = "Upgrade to the latest stable version to fix security vulnerabilities."
