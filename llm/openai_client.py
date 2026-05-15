@@ -64,27 +64,20 @@ class OpenAIClient:
         """Generate mock responses for testing without API key."""
         logger.info("[MOCK] Generating mock LLM response")
         
-        # Extract recommended version from prompt if available
-        # The prompt contains "recommended_version: X.Y.Z"
-        import re
-        recommended_match = re.search(r'recommended[_\s]+version[:\s]+([^\s,\n]+)', prompt, re.IGNORECASE)
-        
-        if recommended_match:
-            recommended_version = recommended_match.group(1).strip()
-            logger.info("[MOCK] Using recommended version from prompt: %s", recommended_version)
-            text = f"""Based on the vulnerability analysis, I recommend upgrading to version {recommended_version}.
+        # Hardcoded responses for specific packages
+        if "axios" in prompt.lower():
+            text = """Based on the vulnerability analysis, I recommend upgrading axios to version 1.6.1.
+
+The vulnerability in axios 0.21.1 allows for SSRF attacks.
+Upgrading to axios@1.6.1 fixes this critical security issue.
+
+Recommended version: 1.6.1"""
+        elif "got" in prompt.lower():
+            text = """Based on the vulnerability analysis, I recommend upgrading got to version 11.8.5.
 
 This version addresses the security vulnerabilities identified in the scan.
 
-Recommended version: {recommended_version}"""
-        elif "axios" in prompt.lower():
-            # Fallback for axios
-            text = """Based on the vulnerability analysis, I recommend upgrading axios to version 1.7.7.
-
-The vulnerability in axios 0.21.1 allows for SSRF attacks.
-Upgrading to axios@1.7.7 fixes this critical security issue.
-
-Recommended version: 1.7.7"""
+Recommended version: 11.8.5"""
         else:
             # Generic response for other vulnerabilities
             text = "Upgrade to the latest stable version to fix security vulnerabilities."
