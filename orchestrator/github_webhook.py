@@ -73,14 +73,16 @@ async def github_webhook(
     """
     body = await request.body()
 
-    webhook_secret = os.getenv("GITHUB_WEBHOOK_SECRET")
-    # Prefer sha256 header if provided, else sha1 header.
-    _verify_signature(body, x_hub_signature_256 or x_hub_signature, webhook_secret)
-
+    # Parse JSON first to provide better error messages
     try:
         payload = json.loads(body.decode("utf-8"))
     except json.JSONDecodeError as exc:
+        logger.error("Failed to parse JSON payload: %s", str(exc))
         raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
+
+    webhook_secret = os.getenv("GITHUB_WEBHOOK_SECRET")
+    # Prefer sha256 header if provided, else sha1 header.
+    _verify_signature(body, x_hub_signature_256 or x_hub_signature, webhook_secret)
 
     if x_github_event != "push":
         # Hackathon-friendly: ignore other events.
