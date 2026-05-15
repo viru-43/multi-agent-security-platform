@@ -5,7 +5,7 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 
 from orchestrator.workflow import run_workflow
 
@@ -41,13 +41,36 @@ def _verify_signature(body: bytes, signature_header: Optional[str], secret: Opti
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
 
+async def _run_workflow_background(repo_url: str, commit_sha: str) -> None:
+    """Background task to run the workflow without blocking the webhook response."""
+    try:
+        logger.info("[background] Starting workflow for repo=%s commit=%s", repo_url, commit_sha)
+        result = await run_workflow(repo_url=repo_url, commit_sha=commit_sha)
+        logger.info("[background] Workflow completed successfully for repo=%s", repo_url)
+        logger.debug("[background] Result: %s", result)
+    except Exception as e:
+        logger.error("[background] Workflow failed for repo=%s: %s", repo_url, str(e), exc_info=True)
+
+
 @router.post("/webhook/github")
 async def github_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     x_github_event: str = Header(default=""),
     x_hub_signature_256: Optional[str] = Header(default=None),
     x_hub_signature: Optional[str] = Header(default=None),
 ) -> Dict[str, Any]:
+    """
+    GitHub webhook endpoint for push events.
+    
+    This endpoint:
+    1. Validates the webhook signature for security
+    2. Extracts repository and commit information
+    3. Triggers the agent workflow in the background (non-blocking)
+    4. Returns immediate acknowledgment to GitHub
+    
+    The actual scan, analysis, and remediation happen asynchronously.
+    """
     body = await request.body()
 
     webhook_secret = os.getenv("GITHUB_WEBHOOK_SECRET")
@@ -61,17 +84,25 @@ async def github_webhook(
 
     if x_github_event != "push":
         # Hackathon-friendly: ignore other events.
+        logger.info("Ignoring non-push event: %s", x_github_event)
         return {"status": "ignored", "reason": f"Unsupported event {x_github_event}"}
 
     repo = payload.get("repository") or {}
     clone_url = repo.get("clone_url") or repo.get("html_url")
     commit_id = payload.get("after") or ""
+    repo_name = repo.get("full_name", "unknown")
 
     if not clone_url:
         raise HTTPException(status_code=400, detail="Missing repository clone_url")
 
-    logger.info("Received push webhook repo=%s commit=%s", clone_url, commit_id)
+    logger.info("Received push webhook repo=%s (%s) commit=%s", repo_name, clone_url, commit_id)
 
-    # Run orchestrator (async) - for MVP we do it inline; for scale you’d queue it.
-    result = await run_workflow(repo_url=clone_url, commit_sha=commit_id)
-    return {"status": "ok", "result": result}
+    # Add workflow to background tasks - GitHub gets immediate response
+    background_tasks.add_task(_run_workflow_background, clone_url, commit_id)
+    
+    return {
+        "status": "accepted",
+        "message": "Webhook received and workflow queued",
+        "repository": repo_name,
+        "commit": commit_id[:7] if commit_id else "unknown"
+    }
