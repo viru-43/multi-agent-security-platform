@@ -94,12 +94,23 @@ class ScannerAgent:
 
     async def _run_cmd(self, args: List[str], cwd: Path, allow_failure: bool = False) -> str:
         logger.info("Running command: %s (cwd=%s)", " ".join(args), cwd)
+        
+        # Ensure Nix profile is in PATH for Railway deployment
+        env = os.environ.copy()
+        env["npm_config_fund"] = "false"
+        env["npm_config_audit"] = "false"
+        
+        # Add Nix profile to PATH if not already there
+        nix_path = "/root/.nix-profile/bin"
+        if nix_path not in env.get("PATH", ""):
+            env["PATH"] = f"{nix_path}:{env.get('PATH', '')}"
+        
         proc = await asyncio.create_subprocess_exec(
             *args,
             cwd=str(cwd),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            env={**os.environ, "npm_config_fund": "false", "npm_config_audit": "false"},
+            env=env,
         )
         out_b, _ = await proc.communicate()
         out = out_b.decode("utf-8", errors="replace")
