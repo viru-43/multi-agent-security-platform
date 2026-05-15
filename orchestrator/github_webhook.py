@@ -72,12 +72,26 @@ async def github_webhook(
     The actual scan, analysis, and remediation happen asynchronously.
     """
     body = await request.body()
+    
+    # Log raw body for debugging
+    logger.info("Received webhook - Event: %s, Body length: %d bytes", x_github_event, len(body))
+    
+    # Handle empty body
+    if not body:
+        logger.error("Empty webhook body received")
+        raise HTTPException(status_code=400, detail="Empty request body")
 
     # Parse JSON first to provide better error messages
+    body_str = ""
     try:
-        payload = json.loads(body.decode("utf-8"))
+        body_str = body.decode("utf-8")
+        logger.debug("Body preview: %s", body_str[:200])
+        payload = json.loads(body_str)
+    except UnicodeDecodeError as exc:
+        logger.error("Failed to decode body as UTF-8: %s", str(exc))
+        raise HTTPException(status_code=400, detail="Invalid UTF-8 encoding") from exc
     except json.JSONDecodeError as exc:
-        logger.error("Failed to parse JSON payload: %s", str(exc))
+        logger.error("Failed to parse JSON payload: %s. Body: %s", str(exc), body_str[:500])
         raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
 
     webhook_secret = os.getenv("GITHUB_WEBHOOK_SECRET")
