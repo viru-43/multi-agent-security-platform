@@ -29,12 +29,18 @@ class OpenAIClient:
         self.api_key = os.getenv("OPENAI_API_KEY")
         self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self.use_mock = os.getenv("USE_MOCK_LLM", "false").lower() == "true"
+        self.base_url = os.getenv("OPENAI_BASE_URL")  # Optional custom base URL
 
         if not self.use_mock and not self.api_key:
             raise RuntimeError("OPENAI_API_KEY is not set (or set USE_MOCK_LLM=true for testing)")
 
         if not self.use_mock:
-            self.client = OpenAI(api_key=self.api_key)
+            # Support custom base URL for IBM GenAI Hub or other OpenAI-compatible APIs
+            if self.base_url:
+                logger.info("Using custom OpenAI base URL: %s", self.base_url)
+                self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+            else:
+                self.client = OpenAI(api_key=self.api_key)
         else:
             logger.info("Using MOCK LLM mode - no API calls will be made")
 
